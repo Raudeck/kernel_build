@@ -1,0 +1,49 @@
+name: Build Linux Kernel
+on: [push]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Maximum build space
+        uses: easimon/maximize-build-space@master
+        with:
+          root-reverse-mb: 4096
+          swap-size-mb: 512
+          remove-dotnet: true
+          remove-android: true
+      - name: Checkout
+        uses: actions/checkout@v2
+      - name: Add dependencies
+        run: |
+          sudo sh -c 'echo "deb-src http://archive.ubuntu.com/ubuntu/ jammy main restricted universe multiverse" >> /etc/apt/sources.list'
+          sudo sh -c 'echo "deb-src http://archive.ubuntu.com/ubuntu/ jammy-updates main restricted universe multiverse" >> /etc/apt/sources.list'
+          sudo sh -c 'echo "deb-src http://archive.ubuntu.com/ubuntu/ jammy-security main restricted universe multiverse" >> /etc/apt/sources.list'
+          sudo sh -c 'echo "deb-src http://archive.ubuntu.com/ubuntu/ jammy-backports main restricted universe multiverse" >> /etc/apt/sources.list'
+          sudo apt update 
+          sudo apt install -y libunwind-dev
+          sudo apt build-dep linux -y
+          sudo apt install git build-essential kernel-wedge fakeroot flex bison binutils-dev libssl-dev libelf-dev libslang2-dev libpci-dev libiberty-dev libcap-dev libudev-dev libdw-dev libunwind-dev libncurses-dev libzstd-dev libnuma-dev libbabeltrace-dev default-jre default-jdk linux-cloud-tools-common linux-tools-$(uname -r)
+      - name: Download Kernel
+        run: |
+          wget https://cdn.kernel.org/pub/linux/kernel/v6.x/linux-6.1.22.tar.xz 
+          tar xvf linux-6.1.22.tar.xz
+      - name: Apply patches
+        run: 
+          git clone https://github.com/cloudflare/linux.git patches
+      - name: Compile
+        run: |
+          cd linux-6.1.22
+          patch -p1 ../patches/patches/0014-add-a-sysctl-to-enable-disable-tcp_collapse-logic.patch
+          cp ../.config .config
+          make deb-pkg -j2
+          cd ..
+          mkdir "artifact"
+          rm ./*dbg*.deb
+          mv ./*.deb artifact/
+      - name: Artifact
+        uses: actions/upload-artifact@v2
+        with:
+          name: artifact
+          path: ${{ github.workspace }}/artifact/
+
+        
