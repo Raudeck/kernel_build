@@ -7,7 +7,7 @@ jobs:
       - name: Maximum build space
         uses: easimon/maximize-build-space@master
         with:
-          root-reserve-mb: 5116
+          root-reserve-mb: 5116 
           swap-size-mb: 512
           remove-dotnet: true
           remove-android: true
@@ -30,19 +30,49 @@ jobs:
         run: |
           wget https://cdn.kernel.org/pub/linux/kernel/v6.x/linux-6.1.22.tar.xz 
           tar xvf linux-6.1.22.tar.xz
-      - name: Apply patches
+      - name: Download patches
         run: 
           git clone https://github.com/cloudflare/linux.git patches
       - name: Compile
         run: |
           cd linux-6.1.22
-          patch -p1 ../patches/patches/0014-add-a-sysctl-to-enable-disable-tcp_collapse-logic.patch
+          patch -p1 < ../patches/patches/0014-add-a-sysctl-to-enable-disable-tcp_collapse-logic.patch
           cp ../.config .config
           make deb-pkg -j2
           cd ..
           mkdir "artifact"
           rm ./*dbg*.deb
           mv ./*.deb artifact/
+      - name: Linux Image Convertion
+        run: |
+          mkdir -p debian_linux_image
+          cp artifact/$(ls artifact | grep linux-image) debian_linux_image/$(ls artifact | grep linux-image)
+          cd debian_linux_image
+          ar -x $(ls ../artifact | grep linux-image)
+          zstd -d control.tar.zst
+          zstd -d data.tar.zst
+          xz control.tar
+          xz data.tar
+          rm $(ls ../artifact | grep linux-image)
+          ar -rc debian-$(ls ../artifact | grep linux-image) debian-binary control.tar.xz data.tar.xz
+          mv debian-$(ls ../artifact | grep linux-image) ../artifact/
+          cd ..
+          rm -rf debian_linux_image
+      - name: Linux Headers Convertion
+        run: |
+          mkdir -p debian_linux_headers
+          cp artifact/$(ls artifact | grep linux-headers) debian_linux_headers/$(ls artifact | grep linux-headers)
+          cd debian_linux_headers
+          ar -x $(ls ../artifact | grep linux-headers)
+          zstd -d control.tar.zst
+          zstd -d data.tar.zst
+          xz control.tar
+          xz data.tar
+          rm $(ls ../artifact | grep linux-headers)
+          ar -rc debian-$(ls ../artifact | grep linux-headers) debian-binary control.tar.xz data.tar.xz
+          mv debian-$(ls ../artifact | grep linux-headers) ../artifact/
+          cd ..
+          rm -rf debian_linux_headers
       - name: Artifact
         uses: actions/upload-artifact@v2
         with:
