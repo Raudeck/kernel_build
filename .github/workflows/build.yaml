@@ -28,44 +28,21 @@ jobs:
           sudo apt install git build-essential kernel-wedge fakeroot flex bison binutils-dev libssl-dev libelf-dev libslang2-dev libpci-dev libiberty-dev libcap-dev libudev-dev libdw-dev libunwind-dev libncurses-dev libzstd-dev libnuma-dev libbabeltrace-dev default-jre default-jdk linux-cloud-tools-common linux-tools-$(uname -r)
       - name: Download Kernel
         run: |
-          wget https://cdn.kernel.org/pub/linux/kernel/v6.x/linux-6.1.22.tar.xz 
-          tar xvf linux-6.1.22.tar.xz
+          git clone -o google-bbr -b v3  https://github.com/google/bbr.git
       - name: Download patches
         run: |
           git clone https://github.com/cloudflare/linux.git patches
-          git clone https://github.com/xanmod/linux-patches.git
       - name: Compile
         run: |
-          cd linux-6.1.22
+          cd bbr
           patch -p1 < ../patches/patches/0014-add-a-sysctl-to-enable-disable-tcp_collapse-logic.patch
-          patch -p1 < ../linux-patches/linux-6.1.y-xanmod/net/bbr2/0001-net-tcp_bbr-broaden-app-limited-rate-sample-detectio.patch
-          patch -p1 < ../linux-patches/linux-6.1.y-xanmod/net/bbr2/0002-net-tcp_bbr-v2-shrink-delivered_mstamp-first_tx_msta.patch
-          patch -p1 < ../linux-patches/linux-6.1.y-xanmod/net/bbr2/0003-net-tcp_bbr-v2-snapshot-packets-in-flight-at-transmi.patch
-          patch -p1 < ../linux-patches/linux-6.1.y-xanmod/net/bbr2/0004-net-tcp_bbr-v2-count-packets-lost-over-TCP-rate-samp.patch
-          patch -p1 < ../linux-patches/linux-6.1.y-xanmod/net/bbr2/0005-net-tcp_bbr-v2-export-FLAG_ECE-in-rate_sample.is_ece.patch
-          patch -p1 < ../linux-patches/linux-6.1.y-xanmod/net/bbr2/0006-net-tcp_bbr-v2-introduce-ca_ops-skb_marked_lost-CC-m.patch
-          patch -p1 < ../linux-patches/linux-6.1.y-xanmod/net/bbr2/0007-net-tcp_bbr-v2-factor-out-tx.in_flight-setting-into-.patch
-          patch -p1 < ../linux-patches/linux-6.1.y-xanmod/net/bbr2/0008-net-tcp_bbr-v2-adjust-skb-tx.in_flight-upon-merge-in.patch
-          patch -p1 < ../linux-patches/linux-6.1.y-xanmod/net/bbr2/0009-net-tcp_bbr-v2-adjust-skb-tx.in_flight-upon-split-in.patch
-          patch -p1 < ../linux-patches/linux-6.1.y-xanmod/net/bbr2/0010-net-tcp_bbr-v2-set-tx.in_flight-for-skbs-in-repair-w.patch
-          patch -p1 < ../linux-patches/linux-6.1.y-xanmod/net/bbr2/0011-net-tcp-add-new-ca-opts-flag-TCP_CONG_WANTS_CE_EVENT.patch
-          patch -p1 < ../linux-patches/linux-6.1.y-xanmod/net/bbr2/0012-net-tcp-re-generalize-TSO-sizing-in-TCP-CC-module-AP.patch
-          patch -p1 < ../linux-patches/linux-6.1.y-xanmod/net/bbr2/0013-net-tcp-add-fast_ack_mode-1-skip-rwin-check-in-tcp_f.patch
-          patch -p1 < ../linux-patches/linux-6.1.y-xanmod/net/bbr2/0014-net-tcp_bbr-v2-BBRv2-bbr2-congestion-control-for-Lin.patch
-          patch -p1 < ../linux-patches/linux-6.1.y-xanmod/net/bbr2/0015-net-tcp_bbr-v2-remove-unnecessary-rs.delivered_ce-lo.patch
-          patch -p1 < ../linux-patches/linux-6.1.y-xanmod/net/bbr2/0016-net-tcp_bbr-v2-remove-field-bw_rtts-that-is-unused-i.patch
-          patch -p1 < ../linux-patches/linux-6.1.y-xanmod/net/bbr2/0017-net-tcp_bbr-v2-remove-cycle_rand-parameter-that-is-u.patch
-          patch -p1 < ../linux-patches/linux-6.1.y-xanmod/net/bbr2/0018-net-tcp_bbr-v2-don-t-assume-prior_cwnd-was-set-enter.patch
-          patch -p1 < ../linux-patches/linux-6.1.y-xanmod/net/bbr2/0019-net-tcp_bbr-v2-Fix-missing-ECT-markings-on-retransmi.patch
-          patch -p1 < ../linux-patches/linux-6.1.y-xanmod/net/bbr2/0020-net-tcp_bbr-v2-add-support-for-PLB-in-TCP-and-BBRv2.patch
-          patch -p1 < ../linux-patches/linux-6.1.y-xanmod/net/bbr2/0021-net-tcp_bbr-v2-Use-correct-64-bit-division.patch
           cp ../.config .config
           make deb-pkg -j2
           cd ..
           mkdir "artifact"
           rm ./*dbg*.deb
           mv ./*.deb artifact/
-      - name: Linux Image Convertion
+      - name: Remove linux image zstd compression for Debian
         run: |
           mkdir -p debian_linux_image
           cp artifact/$(ls artifact | grep linux-image) debian_linux_image/$(ls artifact | grep linux-image)
@@ -80,7 +57,7 @@ jobs:
           mv debian-$(ls ../artifact | grep linux-image) ../artifact/
           cd ..
           rm -rf debian_linux_image
-      - name: Linux Headers Convertion
+      - name: Remove linux headers zstd compression for Debian
         run: |
           mkdir -p debian_linux_headers
           cp artifact/$(ls artifact | grep linux-headers) debian_linux_headers/$(ls artifact | grep linux-headers)
