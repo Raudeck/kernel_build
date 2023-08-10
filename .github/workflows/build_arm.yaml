@@ -1,4 +1,4 @@
-name: Build Linux Kernel for x86_64
+name: Build Linux Kernel for AARCH64
 on: [push]
 jobs:
   build:
@@ -26,7 +26,7 @@ jobs:
           sudo apt upgrade -y
           sudo apt install -y libunwind-dev
           sudo apt build-dep linux -y
-          sudo apt install git build-essential kernel-wedge fakeroot flex bison binutils-dev libssl-dev libelf-dev libslang2-dev libpci-dev libiberty-dev libcap-dev libudev-dev libdw-dev libunwind-dev libncurses-dev libzstd-dev libnuma-dev libbabeltrace-dev default-jre default-jdk linux-cloud-tools-common linux-tools-$(uname -r) pahole kmod bc rsync
+          sudo apt install git build-essential kernel-wedge fakeroot flex bison binutils-dev libssl-dev libelf-dev libslang2-dev libpci-dev libiberty-dev libcap-dev libudev-dev libdw-dev libunwind-dev libncurses-dev libzstd-dev libnuma-dev libbabeltrace-dev default-jre default-jdk linux-cloud-tools-common linux-tools-$(uname -r) pahole kmod bc rsync gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu
       - name: Download kernel
         run: |
           git clone -o google-bbr -b v3  https://github.com/google/bbr.git
@@ -42,11 +42,10 @@ jobs:
           sed -i "49s/^/\t/g" ../patches/patches/0014-add-a-sysctl-to-enable-disable-tcp_collapse-logic.patch
           sed -i "52d" ../patches/patches/0014-add-a-sysctl-to-enable-disable-tcp_collapse-logic.patch
           patch -p1 < ../patches/patches/0014-add-a-sysctl-to-enable-disable-tcp_collapse-logic.patch
-          cp ../.config .config
-          make deb-pkg -j2
+          cp ../.config_aarch64 .config
+          make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- deb-pkg -j2
           cd ..
           mkdir "artifact"
-          rm ./*dbg*.deb
           mv ./*.deb artifact/
       - name: Remove linux image zstd compression for Debian
         run: |
