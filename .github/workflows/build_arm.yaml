@@ -30,18 +30,9 @@ jobs:
       - name: Download kernel
         run: |
           git clone -o google-bbr -b v3  https://github.com/google/bbr.git
-      - name: Download patch
-        run: |
-          git clone https://github.com/cloudflare/linux.git patches
       - name: Compile
         run: |
           cd bbr
-          sed -i "s/struct netns_ipv4 {//g" ../patches/patches/0014-add-a-sysctl-to-enable-disable-tcp_collapse-logic.patch
-          sed -i "s/-182,6 +182,7/-195,6 +195,7/g" ../patches/patches/0014-add-a-sysctl-to-enable-disable-tcp_collapse-logic.patch
-          sed -i "49i u8 sysctl_tcp_syn_linear_timeouts;" ../patches/patches/0014-add-a-sysctl-to-enable-disable-tcp_collapse-logic.patch
-          sed -i "49s/^/\t/g" ../patches/patches/0014-add-a-sysctl-to-enable-disable-tcp_collapse-logic.patch
-          sed -i "52d" ../patches/patches/0014-add-a-sysctl-to-enable-disable-tcp_collapse-logic.patch
-          patch -p1 < ../patches/patches/0014-add-a-sysctl-to-enable-disable-tcp_collapse-logic.patch
           cp ../.config_aarch64 .config
           make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- deb-pkg -j2
           cd ..
