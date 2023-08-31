@@ -27,14 +27,20 @@ jobs:
           sudo apt install -y libunwind-dev
           sudo apt build-dep linux -y
           sudo apt install git build-essential kernel-wedge fakeroot flex bison binutils-dev libssl-dev libelf-dev libslang2-dev libpci-dev libiberty-dev libcap-dev libudev-dev libdw-dev libunwind-dev libncurses-dev libzstd-dev libnuma-dev libbabeltrace-dev default-jre default-jdk linux-cloud-tools-common linux-tools-$(uname -r) pahole kmod bc rsync gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu
+      - name: Download patch
+        run: |
+          git clone https://github.com/xanmod/linux-patches.git
       - name: Download kernel
         run: |
-          git clone -o google-bbr -b v3  https://github.com/google/bbr.git
+          wget https://cdn.kernel.org/pub/linux/kernel/v6.x/linux-6.5.tar.xz
+          tar xvf linux-6.5.tar.xz
+          rm linux-6.5.tar.xz
       - name: Compile
         run: |
-          cd bbr
+          cd linux-6.5
+          patch -p1 < ../linux-patches/linux-6.5.y-xanmod/net/tcp/cloudflare/0001-tcp-Add-a-sysctl-to-skip-tcp-collapse-processing-whe.patch
           cp ../.config_aarch64 .config
-          make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- deb-pkg -j2
+          make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- bindeb-pkg -j2
           cd ..
           mkdir "artifact"
           mv ./*.deb artifact/
