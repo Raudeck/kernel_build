@@ -29,21 +29,18 @@ jobs:
           sudo apt install git build-essential kernel-wedge fakeroot flex bison binutils-dev libssl-dev libelf-dev libslang2-dev libpci-dev libiberty-dev libcap-dev libudev-dev libdw-dev libunwind-dev libncurses-dev libzstd-dev libnuma-dev libbabeltrace-dev default-jre default-jdk linux-cloud-tools-common linux-tools-$(uname -r) pahole kmod bc rsync
       - name: Download kernel
         run: |
-          git clone -o google-bbr -b v3  https://github.com/google/bbr.git
+          wget https://cdn.kernel.org/pub/linux/kernel/v6.x/linux-6.5.tar.xz
+          tar xvf linux-6.5.tar.xz
+          rm linux-6.5.tar.xz
       - name: Download patch
         run: |
-          git clone https://github.com/cloudflare/linux.git patches
+          git clone https://github.com/xanmod/linux-patches.git
       - name: Compile
         run: |
-          cd bbr
-          sed -i "s/struct netns_ipv4 {//g" ../patches/patches/0014-add-a-sysctl-to-enable-disable-tcp_collapse-logic.patch
-          sed -i "s/-182,6 +182,7/-195,6 +195,7/g" ../patches/patches/0014-add-a-sysctl-to-enable-disable-tcp_collapse-logic.patch
-          sed -i "49i u8 sysctl_tcp_syn_linear_timeouts;" ../patches/patches/0014-add-a-sysctl-to-enable-disable-tcp_collapse-logic.patch
-          sed -i "49s/^/\t/g" ../patches/patches/0014-add-a-sysctl-to-enable-disable-tcp_collapse-logic.patch
-          sed -i "52d" ../patches/patches/0014-add-a-sysctl-to-enable-disable-tcp_collapse-logic.patch
-          patch -p1 < ../patches/patches/0014-add-a-sysctl-to-enable-disable-tcp_collapse-logic.patch
+          cd linux-6.5
+          patch -p1 < ../linux-patches/linux-6.5.y-xanmod/net/tcp/cloudflare/0001-tcp-Add-a-sysctl-to-skip-tcp-collapse-processing-whe.patch
           cp ../.config .config
-          make deb-pkg -j2
+          make bindeb-pkg -j2
           cd ..
           mkdir "artifact"
           rm ./*dbg*.deb
