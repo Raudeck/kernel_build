@@ -29,9 +29,9 @@ jobs:
           sudo apt install git build-essential kernel-wedge fakeroot flex bison binutils-dev libssl-dev libelf-dev libslang2-dev libpci-dev libiberty-dev libcap-dev libudev-dev libdw-dev libunwind-dev libncurses-dev libzstd-dev libnuma-dev libbabeltrace-dev default-jre default-jdk linux-cloud-tools-common linux-tools-$(uname -r) pahole kmod bc rsync
       - name: Download kernel
         run: |
-          wget https://cdn.kernel.org/pub/linux/kernel/v6.x/linux-6.6.4.tar.xz
-          tar xvf linux-6.6.4.tar.xz
-          rm linux-6.6.4.tar.xz
+          wget https://cdn.kernel.org/pub/linux/kernel/v6.x/linux-6.6.9.tar.xz
+          tar xvf linux-6.6.9.tar.xz
+          rm linux-6.6.9.tar.xz
       - name: Download patch
         run: |
           git clone https://github.com/xanmod/linux-patches.git
@@ -39,32 +39,14 @@ jobs:
           mkdir -p release/boot
       - name: Compile
         run: |
-          cd linux-6.6.4
+          cd linux-6.6.9
           patch -p1 < ../linux-patches/linux-6.6.y-xanmod/net/tcp/cloudflare/0001-tcp-Add-a-sysctl-to-skip-tcp-collapse-processing-whe.patch
-          patch -p1 < ../linux-patches/linux-6.6.y-xanmod/net/tcp/bbr3/0001-net-tcp_bbr-broaden-app-limited-rate-sample-detectio.patch
-          patch -p1 < ../linux-patches/linux-6.6.y-xanmod/net/tcp/bbr3/0002-net-tcp_bbr-v2-shrink-delivered_mstamp-first_tx_msta.patch
-          patch -p1 < ../linux-patches/linux-6.6.y-xanmod/net/tcp/bbr3/0003-net-tcp_bbr-v2-snapshot-packets-in-flight-at-transmi.patch
-          patch -p1 < ../linux-patches/linux-6.6.y-xanmod/net/tcp/bbr3/0004-net-tcp_bbr-v2-count-packets-lost-over-TCP-rate-samp.patch
-          patch -p1 < ../linux-patches/linux-6.6.y-xanmod/net/tcp/bbr3/0005-net-tcp_bbr-v2-export-FLAG_ECE-in-rate_sample.is_ece.patch
-          patch -p1 < ../linux-patches/linux-6.6.y-xanmod/net/tcp/bbr3/0006-net-tcp_bbr-v2-introduce-ca_ops-skb_marked_lost-CC-m.patch
-          patch -p1 < ../linux-patches/linux-6.6.y-xanmod/net/tcp/bbr3/0007-net-tcp_bbr-v2-adjust-skb-tx.in_flight-upon-merge-in.patch
-          patch -p1 < ../linux-patches/linux-6.6.y-xanmod/net/tcp/bbr3/0008-net-tcp_bbr-v2-adjust-skb-tx.in_flight-upon-split-in.patch
-          patch -p1 < ../linux-patches/linux-6.6.y-xanmod/net/tcp/bbr3/0009-net-tcp-add-new-ca-opts-flag-TCP_CONG_WANTS_CE_EVENT.patch
-          patch -p1 < ../linux-patches/linux-6.6.y-xanmod/net/tcp/bbr3/0010-net-tcp-re-generalize-TSO-sizing-in-TCP-CC-module-AP.patch
-          patch -p1 < ../linux-patches/linux-6.6.y-xanmod/net/tcp/bbr3/0011-net-tcp-add-fast_ack_mode-1-skip-rwin-check-in-tcp_f.patch
-          patch -p1 < ../linux-patches/linux-6.6.y-xanmod/net/tcp/bbr3/0012-net-tcp_bbr-v2-record-app-limited-status-of-TLP-repa.patch
-          patch -p1 < ../linux-patches/linux-6.6.y-xanmod/net/tcp/bbr3/0013-net-tcp_bbr-v2-inform-CC-module-of-losses-repaired-b.patch
-          patch -p1 < ../linux-patches/linux-6.6.y-xanmod/net/tcp/bbr3/0014-net-tcp_bbr-v2-introduce-is_acking_tlp_retrans_seq-i.patch
-          patch -p1 < ../linux-patches/linux-6.6.y-xanmod/net/tcp/bbr3/0015-tcp-introduce-per-route-feature-RTAX_FEATURE_ECN_LOW.patch
-          patch -p1 < ../linux-patches/linux-6.6.y-xanmod/net/tcp/bbr3/0016-net-tcp_bbr-v3-update-TCP-bbr-congestion-control-mod.patch
-          patch -p1 < ../linux-patches/linux-6.6.y-xanmod/net/tcp/bbr3/0017-net-tcp_bbr-v3-ensure-ECN-enabled-BBR-flows-set-ECT-.patch
-          patch -p1 < ../linux-patches/linux-6.6.y-xanmod/net/tcp/bbr3/0018-tcp-export-TCPI_OPT_ECN_LOW-in-tcp_info-tcpi_options.patch
           cp ../.config .config
           make -j2
           make INSTALL_MOD_PATH=../release modules_install
-          cp arch/x86/boot/bzImage ../release/boot/vmlinuz-6.6.4
-          cp System.map ../release/boot/System.map-6.6.4
-          cp .config ../release/boot/config-6.6.4
+          cp arch/x86/boot/bzImage ../release/boot/vmlinuz-6.6.9
+          cp System.map ../release/boot/System.map-6.6.9
+          cp .config ../release/boot/config-6.6.9
           make bindeb-pkg -j2
           cd ..
           mkdir "artifact"
