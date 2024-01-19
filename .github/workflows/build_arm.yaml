@@ -1,7 +1,6 @@
 name: Build Linux Kernel for AARCH64
 on: 
   workflow_dispatch:
-  push:
 jobs:
   build:
     runs-on: ubuntu-latest
