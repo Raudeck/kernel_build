@@ -30,7 +30,7 @@ jobs:
           sudo apt install git build-essential kernel-wedge fakeroot flex bison binutils-dev libssl-dev libelf-dev libslang2-dev libpci-dev libiberty-dev libcap-dev libudev-dev libdw-dev libunwind-dev libncurses-dev libzstd-dev libnuma-dev libbabeltrace-dev default-jre default-jdk linux-cloud-tools-common linux-tools-$(uname -r) pahole kmod bc rsync
       - name: Download kernel
         run: |
-          git clone -b main --depth 1 'https://kernel.googlesource.com/pub/scm/linux/kernel/git/netdev/net-next.git'
+          git clone -b v6.8-rc1 --depth 1 'https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git'
       - name: Download patch
         run: |
           git clone https://github.com/xanmod/linux-patches.git
@@ -38,14 +38,14 @@ jobs:
           mkdir -p release/boot
       - name: Compile
         run: |
-          cd net-next
+          cd linux
           patch -p1 < ../linux-patches/linux-6.7.y-xanmod/net/tcp/cloudflare/0001-tcp-Add-a-sysctl-to-skip-tcp-collapse-processing-whe.patch
           cp ../.config .config
           make -j2
           make INSTALL_MOD_PATH=../release modules_install
-          cp arch/x86/boot/bzImage ../release/boot/vmlinuz-6.7.0-rc8
-          cp System.map ../release/boot/System.map-6.7.0-rc8
-          cp .config ../release/boot/config-6.7.0-rc8
+          cp arch/x86/boot/bzImage ../release/boot/vmlinuz-6.8.0-rc1+
+          cp System.map ../release/boot/System.map-6.8.0-rc1+
+          cp .config ../release/boot/config-6.8.0-rc1+
           make bindeb-pkg -j2
           cd ..
           mkdir "artifact"
