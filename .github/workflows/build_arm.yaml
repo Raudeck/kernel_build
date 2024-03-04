@@ -33,20 +33,19 @@ jobs:
           git clone https://github.com/xanmod/linux-patches.git
       - name: Download kernel
         run: |
-          curl -LO https://cdn.kernel.org/pub/linux/kernel/v6.x/linux-6.6.4.tar.xz
-          tar xvf linux-6.6.4.tar.xz
-          rm linux-6.6.4.tar.xz
+          git clone -b v6.8-rc6 --depth 1 'https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git'
           mkdir -p release
           mkdir -p release/boot
       - name: Compile
         run: |
-          cd linux-6.6.4
-          patch -p1 < ../linux-patches/linux-6.6.y-xanmod/net/tcp/cloudflare/0001-tcp-Add-a-sysctl-to-skip-tcp-collapse-processing-whe.patch
+          cd linux
+          patch -p1 < ../linux-patches/linux-6.7.y-xanmod/net/tcp/cloudflare/0001-tcp-Add-a-sysctl-to-skip-tcp-collapse-processing-whe.patch
           cp ../.config_aarch64 .config
+          make ARCH=arm64 olddefconfig
           make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- -j2
-          cp arch/arm64/boot/Image ../release/boot/vmlinuz-6.6.4
-          cp System.map ../release/boot/System.map-6.6.4
-          cp .config ../release/boot/config-6.6.4
+          cp arch/arm64/boot/Image ../release/boot/vmlinuz-6.8.0-rc6-dirty
+          cp System.map ../release/boot/System.map-6.8.0-rc6-dirty
+          cp .config ../release/boot/config-6.8.0-rc6-dirty
           make INSTALL_MOD_PATH=../release modules_install
           make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- bindeb-pkg -j2
           cd ..
