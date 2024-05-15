@@ -36,10 +36,11 @@ jobs:
           git clone https://github.com/xanmod/linux-patches.git
           mkdir -p release
           mkdir -p release/boot
+          mkdir -p release/headers
+          mkdir -p release/linux-headers-6.8.9+
       - name: Compile
         run: |
           cd linux
-          git switch -c compile
           patch -p1 < ../linux-patches/linux-6.8.y-xanmod/net/tcp/cloudflare/0001-tcp-Add-a-sysctl-to-skip-tcp-collapse-processing-whe.patch
           patch -p1 < ../linux-patches/linux-6.8.y-xanmod/net/tcp/bbr3/0001-net-tcp_bbr-broaden-app-limited-rate-sample-detectio.patch
           patch -p1 < ../linux-patches/linux-6.8.y-xanmod/net/tcp/bbr3/0002-net-tcp_bbr-v2-shrink-delivered_mstamp-first_tx_msta.patch
@@ -60,13 +61,23 @@ jobs:
           patch -p1 < ../linux-patches/linux-6.8.y-xanmod/net/tcp/bbr3/0017-net-tcp_bbr-v3-ensure-ECN-enabled-BBR-flows-set-ECT-.patch
           patch -p1 < ../linux-patches/linux-6.8.y-xanmod/net/tcp/bbr3/0018-tcp-export-TCPI_OPT_ECN_LOW-in-tcp_info-tcpi_options.patch
           patch -p1 < ../linux-patches/linux-6.8.y-xanmod/net/tcp/bbr3/0019-x86-cfi-bpf-Add-tso_segs-and-skb_marked_lost-to-bpf_.patch
-          cp ../.config .config
+          cp ../.config ../release/linux-headers-6.8.9+/.config
+          make O=../release/linux-headers-6.8.9+ olddefconfig
+          make O=../release/linux-headers-6.8.9+ modules_prepare
+          rm -r ../release/linux-headers-6.8.9+/source
+          cp ../.config .
           make olddefconfig
+          git config --global user.email "foo@example.com"
+          git config --global user.name "foo"
+          touch .scmversion
+          git add .
+          git commit -m "getting rid of -dirty" | true
           make -j2
+          cp Module.symvers ../release/linux-headers-6.8.9+/Module.symvers
           make INSTALL_MOD_PATH=../release modules_install
-          cp arch/x86/boot/bzImage ../release/boot/vmlinuz-6.8.9
-          cp System.map ../release/boot/System.map-6.8.9
-          cp .config ../release/boot/config-6.8.9
+          cp arch/x86/boot/bzImage ../release/boot/vmlinuz-6.8.9+
+          cp System.map ../release/boot/System.map-6.8.9+
+          cp .config ../release/boot/config-6.8.9+
           make bindeb-pkg -j2
           cd ..
           mkdir "artifact"
