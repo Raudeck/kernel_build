@@ -30,23 +30,24 @@ jobs:
           sudo apt install git build-essential kernel-wedge fakeroot flex bison binutils-dev libssl-dev libelf-dev libslang2-dev libpci-dev libiberty-dev libcap-dev libudev-dev libdw-dev libunwind-dev libncurses-dev libzstd-dev libnuma-dev libbabeltrace-dev default-jre default-jdk linux-cloud-tools-common linux-tools-$(uname -r) pahole kmod bc rsync
       - name: Download kernel
         run: |
-          git clone -b v6.11-rc5 --depth 1 'https://git.kernel.org/pub/scm/linux/kernel/git/stable/linux.git'
+          git clone -b v6.11.3 --depth 1 'https://git.kernel.org/pub/scm/linux/kernel/git/stable/linux.git'
       - name: Download patch
         run: |
           git clone https://github.com/xanmod/linux-patches.git
           mkdir -p release
           mkdir -p release/boot
-          mkdir -p release/linux-headers-6.11-rc5+
+          mkdir -p release/linux-headers
       - name: Compile
         run: |
           cd linux
-          patch -p1 < ../linux-patches/linux-6.10.y-xanmod/net/tcp/cloudflare/0001-tcp-Add-a-sysctl-to-skip-tcp-collapse-processing-whe.patch
-          patch -p1 < ../linux-patches/linux-6.10.y-xanmod/net/netfilter/0001-netfilter-Add-netfilter-nf_tables-fullcone-support.patch
-          patch -p1 < ../linux-patches/linux-6.10.y-xanmod/net/netfilter/0002-netfilter-add-xt_FLOWOFFLOAD-target.patch
-          cp ../.config ../release/linux-headers-6.11-rc5+/.config
-          make O=../release/linux-headers-6.11-rc5+ olddefconfig
-          make O=../release/linux-headers-6.11-rc5+ modules_prepare
-          rm -r ../release/linux-headers-6.11-rc5+/source
+          patch -p1 < ../linux-patches/linux-6.11.y-xanmod/net/tcp/cloudflare/0001-tcp-Add-a-sysctl-to-skip-tcp-collapse-processing-whe.patch
+          patch -p1 < ../linux-patches/linux-6.11.y-xanmod/net/netfilter/0001-netfilter-Add-netfilter-nf_tables-fullcone-support.patch
+          patch -p1 < ../linux-patches/linux-6.11.y-xanmod/net/netfilter/0002-netfilter-add-xt_FLOWOFFLOAD-target.patch
+          bash -c 'for file in ../linux-patches/linux-6.11.y-xanmod/net/tcp/bbr3/*.patch; do patch -p1 < $file; done'
+          cp ../.config ../release/linux-headers/.config
+          make O=../release/linux-headers olddefconfig
+          make O=../release/linux-headers modules_prepare
+          rm -r ../release/linux-headers/source
           cp ../.config .
           make olddefconfig
           git config --global user.email "foo@example.com"
@@ -55,11 +56,12 @@ jobs:
           git add .
           git commit -m "getting rid of -dirty" | true
           make -j2
-          cp Module.symvers ../release/linux-headers-6.11-rc5+/Module.symvers
+          cp Module.symvers ../release/linux-headers/Module.symvers
           make INSTALL_MOD_PATH=../release modules_install
-          cp arch/x86/boot/bzImage ../release/boot/vmlinuz-6.11-rc5+
-          cp System.map ../release/boot/System.map-6.11-rc5+
-          cp .config ../release/boot/config-6.11-rc5+
+          cp arch/x86/boot/bzImage ../release/boot/vmlinuz-$(ls ../release/lib/modules)
+          cp System.map ../release/boot/System.map-$(ls ../release/lib/modules)
+          cp .config ../release/boot/config-$(ls ../release/lib/modules)
+          cat $(cat ../release/linux-headers/Makefile | awk 'NR==2 {print $2}') > ../release/linux-headers/Makefile
           make bindeb-pkg -j2
           cd ..
           mkdir "artifact"
