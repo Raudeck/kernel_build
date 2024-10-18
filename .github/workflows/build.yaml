@@ -97,7 +97,7 @@ jobs:
         run: |
           tar -czvf release-amd64.tar.gz release
           mkdir -p action_release
-          mv release.tar.gz action_release
+          mv release-amd64.tar.gz action_release
       - name: Uplaod to Release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
