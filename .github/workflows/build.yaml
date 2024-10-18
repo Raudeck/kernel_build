@@ -107,7 +107,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release create ${{ github.ref_name }} --generate-notes action_release/release-amd64.tar.gz artifact/linux-headers* artifact/linux-image-* artifact/debian-linux-headers-* artifacts/debian-linux-image-*
+          gh release create ${{ github.ref_name }} --generate-notes action_release/release-amd64.tar.gz artifact/linux-headers* artifact/linux-image-* artifact/debian-linux-headers-* artifact/debian-linux-image-*
       - name: Release
         uses: actions/upload-artifact@v3
         with:
