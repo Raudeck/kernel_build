@@ -46,6 +46,11 @@ jobs:
           bash -c 'for file in ../linux-patches/linux-6.11.y-xanmod/net/tcp/bbr3/*.patch; do patch -p1 < $file; done'
           bash -c 'sed -i "s/# CONFIG_LOCALVERSION_AUTO is not set/CONFIG_LOCALVERSION_AUTO=n/g" .config | true'
           cp ../.config ../release/linux-headers/.config
+          git config --global user.email "foo@example.com"
+          git config --global user.name "foo"
+          touch .scmversion
+          git add .
+          git commit -m "getting rid of -dirty" | true
           make  O=../release/linux-headers olddefconfig
           make O=../release/linux-headers modules_prepare
           rm -r ../release/linux-headers/source
@@ -102,7 +107,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release create ${{ github.ref_name }} release.tar.gz artifact/linux-headers* artifact/linux-image-* artifact/debian-linux-headers-* artifacts/debian-linux-image-*
+          gh release create ${{ github.ref_name }} --generate-notes  release-amd64.tar.gz artifact/linux-headers* artifact/linux-image-* artifact/debian-linux-headers-* artifacts/debian-linux-image-*
       - name: Release
         uses: actions/upload-artifact@v3
         with:
