@@ -15,7 +15,7 @@ jobs:
           remove-docker-images: true
           remove-codeql: true
           remove-haskell: true
-      - name: Checkout
+      - name: Checkoutf
         uses: actions/checkout@v3
       - name: Add dependencies
         run: |
@@ -30,10 +30,10 @@ jobs:
           sudo apt install git build-essential kernel-wedge fakeroot flex bison binutils-dev libssl-dev libelf-dev libslang2-dev libpci-dev libiberty-dev libcap-dev libudev-dev libdw-dev libunwind-dev libncurses-dev libzstd-dev libnuma-dev libbabeltrace-dev default-jre default-jdk linux-cloud-tools-common linux-tools-$(uname -r) pahole kmod bc rsync
       - name: Download kernel
         run: |
-          git clone -b v6.11.3 --depth 1 'https://git.kernel.org/pub/scm/linux/kernel/git/stable/linux.git'
+          git clone -b v6.13.5 --depth 1 'https://git.kernel.org/pub/scm/linux/kernel/git/stable/linux.git'
       - name: Download patch
         run: |
-          git clone https://github.com/xanmod/linux-patches.git
+          git clone https://gitlab.com/xanmod/linux-patches.git
           mkdir -p release
           mkdir -p release/boot
           mkdir -p release/linux-headers
@@ -41,10 +41,10 @@ jobs:
         run: |
           cd linux
           make mrproper
-          patch -p1 < ../linux-patches/linux-6.11.y-xanmod/net/tcp/cloudflare/0001-tcp-Add-a-sysctl-to-skip-tcp-collapse-processing-whe.patch
-          patch -p1 < ../linux-patches/linux-6.11.y-xanmod/net/netfilter/0001-netfilter-Add-netfilter-nf_tables-fullcone-support.patch
-          patch -p1 < ../linux-patches/linux-6.11.y-xanmod/net/netfilter/0002-netfilter-add-xt_FLOWOFFLOAD-target.patch
-          bash -c 'for file in ../linux-patches/linux-6.11.y-xanmod/net/tcp/bbr3/*.patch; do patch -p1 < $file; done'
+          patch -p1 < ../linux-patches/linux-6.13.y-xanmod/net/tcp/cloudflare/0001-tcp-Add-a-sysctl-to-skip-tcp-collapse-processing-whe.patch
+          patch -p1 < ../linux-patches/linux-6.13.y-xanmod/net/netfilter/0001-netfilter-Add-netfilter-nf_tables-fullcone-support.patch
+          patch -p1 < ../linux-patches/linux-6.13.y-xanmod/net/netfilter/0002-netfilter-add-xt_FLOWOFFLOAD-target.patch
+          : #bash -c 'for file in ../linux-patches/linux-6.13.y-xanmod/net/tcp/bbr3/*.patch; do patch -p1 < $file; done'
           bash -c 'sed -i "s/# CONFIG_LOCALVERSION_AUTO is not set/CONFIG_LOCALVERSION_AUTO=n/g" .config | true'
           cp ../.config ../release/linux-headers/.config
           git config --global user.email "foo@example.com"
@@ -63,7 +63,7 @@ jobs:
           cp arch/x86/boot/bzImage ../release/boot/vmlinuz-$(ls ../release/lib/modules)
           cp System.map ../release/boot/System.map-$(ls ../release/lib/modules)
           cp .config ../release/boot/config-$(ls ../release/lib/modules)
-          cat $(cat ../release/linux-headers/Makefile | awk 'NR==2 {print $2}') > ../release/linux-headers/Makefile
+          : #cat $(cat ../release/linux-headers/Makefile | awk 'NR==2 {print $2}') > ../release/linux-headers/Makefile
           make bindeb-pkg -j2
           cd ..
           mkdir "artifact"
@@ -110,12 +110,12 @@ jobs:
         run: |
           gh release create v$(basename $(ls release/lib/modules | awk 'NR==1 {print $0}')) --latest --generate-notes action_release/release-amd64.tar.gz artifact/linux-headers* artifact/linux-image-* artifact/debian-linux-headers-* artifact/debian-linux-image-*
       - name: Release
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: Kernel
           path: ${{ github.workspace }}/action_release/
       - name: Packaging
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: debian
           path: ${{ github.workspace }}/artifact/
