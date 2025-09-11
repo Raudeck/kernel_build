@@ -30,7 +30,7 @@ jobs:
           sudo apt install git build-essential kernel-wedge fakeroot flex bison binutils-dev libssl-dev libelf-dev libslang2-dev libpci-dev libiberty-dev libcap-dev libudev-dev libdw-dev libunwind-dev libncurses-dev libzstd-dev libnuma-dev libbabeltrace-dev default-jre default-jdk linux-cloud-tools-common linux-tools-$(uname -r) pahole kmod bc rsync dwarves
       - name: Download kernel
         run: |
-          git clone -b v6.14 --depth 1 'https://git.kernel.org/pub/scm/linux/kernel/git/stable/linux.git'
+          git clone -b v6.16 --depth 1 'https://git.kernel.org/pub/scm/linux/kernel/git/stable/linux.git'
       - name: Download patch
         run: |
           git clone https://gitlab.com/xanmod/linux-patches.git
@@ -41,10 +41,9 @@ jobs:
         run: |
           cd linux
           make mrproper
-          patch -p1 < ../linux-patches/linux-6.14.y-xanmod/net/tcp/cloudflare/0001-tcp-Add-a-sysctl-to-skip-tcp-collapse-processing-whe.patch
-          patch -p1 < ../linux-patches/linux-6.14.y-xanmod/net/netfilter/0001-netfilter-Add-netfilter-nf_tables-fullcone-support.patch
-          patch -p1 < ../linux-patches/linux-6.14.y-xanmod/net/netfilter/0002-netfilter-add-xt_FLOWOFFLOAD-target.patch
-          : #bash -c 'for file in ../linux-patches/linux-6.14.y-xanmod/net/tcp/bbr3/*.patch; do patch -p1 < $file; done'
+          patch -p1 < ../linux-patches/linux-6.16.y-xanmod/net/tcp/cloudflare/0001-tcp-Add-a-sysctl-to-skip-tcp-collapse-processing-whe.patch
+          bash -c 'for file in ../linux-patches/linux-6.16.y-xanmod/net/netfilter/*.patch; do patch -p1 < $file; done'
+          bash -c 'for file in ../linux-patches/linux-6.16.y-xanmod/net/tcp/bbr3/*.patch; do patch -p1 < $file; done'
           bash -c 'sed -i "s/# CONFIG_LOCALVERSION_AUTO is not set/CONFIG_LOCALVERSION_AUTO=n/g" .config | true'
           cp ../.config ../release/linux-headers/.config
           git config --global user.email "foo@example.com"

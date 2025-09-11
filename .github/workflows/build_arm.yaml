@@ -30,24 +30,27 @@ jobs:
           sudo apt install git build-essential kernel-wedge fakeroot flex bison binutils-dev libssl-dev libelf-dev libslang2-dev libpci-dev libiberty-dev libcap-dev libudev-dev libdw-dev libunwind-dev libncurses-dev libzstd-dev libnuma-dev libbabeltrace-dev default-jre default-jdk linux-cloud-tools-common linux-tools-$(uname -r) pahole kmod bc rsync gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu
       - name: Download patch
         run: |
-          git clone https://github.com/xanmod/linux-patches.git
+          git clone https://gitlab.com/xanmod/linux-patches.git
       - name: Download kernel
         run: |
-          git clone -b v6.8-rc6 --depth 1 'https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git'
+          git clone -b v6.16 --depth 1 'https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git'
           mkdir -p release
           mkdir -p release/boot
       - name: Compile
         run: |
           cd linux
-          patch -p1 < ../linux-patches/linux-6.7.y-xanmod/net/tcp/cloudflare/0001-tcp-Add-a-sysctl-to-skip-tcp-collapse-processing-whe.patch
+          make mrproper
+          patch -p1 < ../linux-patches/linux-6.16.y-xanmod/net/tcp/cloudflare/0001-tcp-Add-a-sysctl-to-skip-tcp-collapse-processing-whe.patch
+          patch -p1 < ../linux-patches/linux-6.16.y-xanmod/net/netfilter/0001-netfilter-Add-netfilter-nf_tables-fullcone-support.patch
+          patch -p1 < ../linux-patches/linux-6.16.y-xanmod/net/netfilter/0002-netfilter-add-xt_FLOWOFFLOAD-target.patch
           cp ../.config_aarch64 .config
           make ARCH=arm64 olddefconfig
           make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- -j2
-          cp arch/arm64/boot/Image ../release/boot/vmlinuz-6.8.0-rc6-dirty
-          cp System.map ../release/boot/System.map-6.8.0-rc6-dirty
-          cp .config ../release/boot/config-6.8.0-rc6-dirty
           make INSTALL_MOD_PATH=../release modules_install
           make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- bindeb-pkg -j2
+          cp arch/arm64/boot/Image ../release/boot/vmlinuz-$(ls ../release/lib/modules)
+          cp System.map ../release/boot/System.map-$(ls ../release/lib/modules)
+          cp .config ../release/boot/config-$(ls ../release/lib/modules)
           cd ..
           mkdir "artifact"
           mv ./*.deb artifact/
@@ -96,5 +99,11 @@ jobs:
         with:
           name: artifact
           path: ${{ github.workspace }}/artifact/
+      - name: Uplaod to Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create v$(basename $(ls release/lib/modules | awk 'NR==1 {print $0}')) --latest --generate-notes action_release/release-amd64.tar.gz artifact/linux-headers* artifact/linux-image-* artifact/debian-linux-headers-* artifact/debian-linux-image-*
+
 
         
