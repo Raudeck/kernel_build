@@ -1,5 +1,5 @@
 name: Build Linux Kernel for AARCH64
-on: 
+on:
   workflow_dispatch:
 jobs:
   build:
@@ -8,102 +8,91 @@ jobs:
       - name: Maximum build space
         uses: easimon/maximize-build-space@master
         with:
-          root-reserve-mb: 8192 
-          swap-size-mb: 512
+          root-reserve-mb: 8192
+          swap-size-mb: 256
           remove-dotnet: true
           remove-android: true
           remove-docker-images: true
           remove-codeql: true
           remove-haskell: true
+
       - name: Checkout
         uses: actions/checkout@v3
+
       - name: Add dependencies
         run: |
-          sudo sh -c 'echo "deb-src http://archive.ubuntu.com/ubuntu/ jammy main restricted universe multiverse" >> /etc/apt/sources.list'
-          sudo sh -c 'echo "deb-src http://archive.ubuntu.com/ubuntu/ jammy-updates main restricted universe multiverse" >> /etc/apt/sources.list'
-          sudo sh -c 'echo "deb-src http://archive.ubuntu.com/ubuntu/ jammy-security main restricted universe multiverse" >> /etc/apt/sources.list'
-          sudo sh -c 'echo "deb-src http://archive.ubuntu.com/ubuntu/ jammy-backports main restricted universe multiverse" >> /etc/apt/sources.list'
-          sudo apt update 
-          sudo apt upgrade -y
-          sudo apt install -y libunwind-dev
-          sudo apt build-dep linux -y
-          sudo apt install git build-essential kernel-wedge fakeroot flex bison binutils-dev libssl-dev libelf-dev libslang2-dev libpci-dev libiberty-dev libcap-dev libudev-dev libdw-dev libunwind-dev libncurses-dev libzstd-dev libnuma-dev libbabeltrace-dev default-jre default-jdk linux-cloud-tools-common linux-tools-$(uname -r) pahole kmod bc rsync gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu
-      - name: Download patch
+          sudo apt remove $(dpkg --get-selections docker.io docker-compose docker-compose-v2 docker-doc podman-docker containerd runc | cut -f1)
+          sudo apt install -y ca-certificates curl
+          sudo install -m 0755 -d /etc/apt/keyrings
+          sudo curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
+          sudo chmod a+r /etc/apt/keyrings/docker.asc
+
+          echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+
+          sudo apt update
+          sudo DEBIAN_FRONTEND=noninteractive apt install docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+
+      - name: Setup QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Setup Docker build environment
         run: |
-          git clone https://gitlab.com/xanmod/linux-patches.git
+          sudo docker buildx build --platform linux/arm64 -t builder .
+
       - name: Download kernel
         run: |
-          git clone -b v6.16 --depth 1 'https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git'
+          git clone -b v6.18.9 --depth 1 'https://git.kernel.org/pub/scm/linux/kernel/git/stable/linux.git' --single-branch
+
+      - name: Compile kernel
+        run: |
+          set -ex
+          shopt -s expand_aliases
+          alias builder='sudo docker run --platform linux/arm64 -v ${GITHUB_WORKSPACE}:${GITHUB_WORKSPACE} -w $(pwd) builder:latest'
+          mkdir -p linux-headers
+          cp .config_aarch64 linux-headers/.config
+
+          pushd linux
+          builder make mrproper
+          builder make O=../linux-headers olddefconfig
+          builder make O=../linux-headers modules_prepare
+          popd
+
+          rm linux-headers/source
+          rm linux-headers/.config
           mkdir -p release
-          mkdir -p release/boot
-      - name: Compile
-        run: |
-          cd linux
-          make mrproper
-          patch -p1 < ../linux-patches/linux-6.16.y-xanmod/net/tcp/cloudflare/0001-tcp-Add-a-sysctl-to-skip-tcp-collapse-processing-whe.patch
-          patch -p1 < ../linux-patches/linux-6.16.y-xanmod/net/netfilter/0001-netfilter-Add-netfilter-nf_tables-fullcone-support.patch
-          patch -p1 < ../linux-patches/linux-6.16.y-xanmod/net/netfilter/0002-netfilter-add-xt_FLOWOFFLOAD-target.patch
+
+          pushd linux
+          builder make mrproper
           cp ../.config_aarch64 .config
-          make ARCH=arm64 olddefconfig
-          make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- -j2
-          make INSTALL_MOD_PATH=../release modules_install
-          make ARCH=arm64 CROSS_COMPILE=aarch64-linux-gnu- bindeb-pkg -j2
-          cp arch/arm64/boot/Image ../release/boot/vmlinuz-$(ls ../release/lib/modules)
-          cp System.map ../release/boot/System.map-$(ls ../release/lib/modules)
-          cp .config ../release/boot/config-$(ls ../release/lib/modules)
-          cd ..
-          mkdir "artifact"
-          mv ./*.deb artifact/
-      - name: Remove linux image zstd compression for Debian
-        run: |
-          mkdir -p debian_linux_image
-          cp artifact/$(ls artifact | grep linux-image) debian_linux_image/$(ls artifact | grep linux-image)
-          cd debian_linux_image
-          ar -x $(ls ../artifact | grep linux-image)
-          zstd -d control.tar.zst
-          zstd -d data.tar.zst
-          xz control.tar
-          xz data.tar
-          rm $(ls ../artifact | grep linux-image)
-          ar -rc debian-$(ls ../artifact | grep linux-image) debian-binary control.tar.xz data.tar.xz
-          mv debian-$(ls ../artifact | grep linux-image) ../artifact/
-          cd ..
-          rm -rf debian_linux_image
-      - name: Remove linux headers zstd compression for Debian
-        run: |
-          mkdir -p debian_linux_headers
-          cp artifact/$(ls artifact | grep linux-headers) debian_linux_headers/$(ls artifact | grep linux-headers)
-          cd debian_linux_headers
-          ar -x $(ls ../artifact | grep linux-headers)
-          zstd -d control.tar.zst
-          zstd -d data.tar.zst
-          xz control.tar
-          xz data.tar
-          rm $(ls ../artifact | grep linux-headers)
-          ar -rc debian-$(ls ../artifact | grep linux-headers) debian-binary control.tar.xz data.tar.xz
-          mv debian-$(ls ../artifact | grep linux-headers) ../artifact/
-          cd ..
-          rm -rf debian_linux_headers
-      - name: Compress
-        run: |
-          tar -czvf release.tar.gz release
-          mkdir -p action_release
-          mv release.tar.gz action_release
-      - name: Kernel
-        uses: actions/upload-artifact@v3
-        with: 
-          name: kernel
-          path: ${{ github.workspace }}/action_release
-      - name: Artifact
-        uses: actions/upload-artifact@v3
+          builder scripts/config --disable DEBUG_INFO_DWARF_TOOLCHAIN_DEFAULT
+          builder scripts/config --disable DEBUG_INFO
+          builder make olddefconfig
+          builder make -j$(nproc)
+          cp Module.symvers ../linux-headers/
+
+          mkdir -p linux-kernel
+          builder make INSTALL_MOD_PATH=linux-kernel modules_install
+          mkdir -p linux-kernel/boot
+          builder make install INSTALL_PATH=linux-kernel/boot
+          builder tar zcvf linux-image-arm64-$(make kernelrelease).tar.gz -C linux-kernel/ .
+          builder bash -c "make kernelrelease > version"
+          echo "RELEASE_VERSION=$(version)" >> $GITHUB_ENV
+
+          echo "RELEASE_NAME=$(ls linux-image-arm64*.tar.gz)" >> $GITHUB_ENV
+          mv $RELEASE_NAME ../release
+
+          mkdir -p debs
+          builder bash -c "make -j$(nproc) bindeb-pkg && mv ../*.deb debs"
+          mv debs/*.deb ../release
+          popd
+
+          mkdir -p ./usr/src/linux-headers-$RELEASE_VERSION
+          mv linux-headers/* ./usr/src/linux-headers-$RELEASE_VERSION
+          tar -zcvf linux-headers-arm64-$RELEASE_VERSION.tar.gz ./usr
+          mv linux-headers-arm64-$RELEASE_VERSION.tar.gz release
+
+      - name: "Generate artifact"
+        uses: actions/upload-artifact@v4
         with:
-          name: artifact
-          path: ${{ github.workspace }}/artifact/
-      - name: Uplaod to Release
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          gh release create v$(basename $(ls release/lib/modules | awk 'NR==1 {print $0}')) --latest --generate-notes action_release/release-amd64.tar.gz artifact/linux-headers* artifact/linux-image-* artifact/debian-linux-headers-* artifact/debian-linux-image-*
-
-
-        
+          name: linux-kernel
+          path: ./release/*
