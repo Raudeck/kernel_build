@@ -1,5 +1,5 @@
 name: Build Linux Kernel for x86_64
-on: 
+on:
   workflow_dispatch:
 jobs:
   build:
@@ -8,15 +8,22 @@ jobs:
       - name: Maximum build space
         uses: easimon/maximize-build-space@master
         with:
-          root-reserve-mb: 8192 
-          swap-size-mb: 512
+          root-reserve-mb: 8192
+          swap-size-mb: 256
           remove-dotnet: true
           remove-android: true
           remove-docker-images: true
           remove-codeql: true
           remove-haskell: true
+
+      - name: Remove unwanted package
+        uses: AdityaGarg8/remove-unwanted-software@v5
+        with:
+          remove-large-packages: true
+
       - name: Checkoutf
         uses: actions/checkout@v3
+
       - name: Add dependencies
         run: |
           sudo sh -c 'echo "deb-src http://archive.ubuntu.com/ubuntu/ jammy main restricted universe multiverse" >> /etc/apt/sources.list'
@@ -28,92 +35,72 @@ jobs:
           sudo apt install -y libunwind-dev
           sudo apt build-dep linux -y
           sudo apt install git build-essential kernel-wedge fakeroot flex bison binutils-dev libssl-dev libelf-dev libslang2-dev libpci-dev libiberty-dev libcap-dev libudev-dev libdw-dev libunwind-dev libncurses-dev libzstd-dev libnuma-dev libbabeltrace-dev default-jre default-jdk linux-cloud-tools-common linux-tools-$(uname -r) pahole kmod bc rsync dwarves
+
       - name: Download kernel
         run: |
-          git clone -b v6.17.10 --depth 1 'https://git.kernel.org/pub/scm/linux/kernel/git/stable/linux.git' --single-branch
+          git clone -b v6.18.13 --depth 1 'https://git.kernel.org/pub/scm/linux/kernel/git/stable/linux.git' --single-branch
+
       - name: Download patch
         run: |
           git clone https://gitlab.com/xanmod/linux-patches.git
           mkdir -p release
           mkdir -p release/boot
           mkdir -p release/linux-headers
+
       - name: Compile
         run: |
           cd linux
           make mrproper
-          patch -p1 < ../linux-patches/linux-6.17.y-xanmod/net/tcp/cloudflare/0001-tcp-Add-a-sysctl-to-skip-tcp-collapse-processing-whe.patch
-          bash -c 'for file in ../linux-patches/linux-6.17.y-xanmod/net/netfilter/*.patch; do patch -p1 < $file; done'
-          : # bash -c 'for file in ../linux-patches/linux-6.17.y-xanmod/net/tcp/bbr3/*.patch; do patch -p1 < $file; done'
+
+          patch -p1 < ../linux-patches/linux-6.18.y-xanmod/net/tcp/cloudflare/0001-tcp-Add-a-sysctl-to-skip-tcp-collapse-processing-whe.patch
+          bash -c 'for file in ../linux-patches/linux-6.18.y-xanmod/net/netfilter/*.patch; do patch -p1 < $file; done'
+          bash -c 'for file in ../linux-patches/linux-6.18.y-xanmod/net/tcp/bbr3/*.patch; do patch -p1 < $file; done'
           bash -c 'sed -i "s/# CONFIG_LOCALVERSION_AUTO is not set/CONFIG_LOCALVERSION_AUTO=n/g" .config | true'
+
           cp ../.config ../release/linux-headers/.config
-          git config --global user.email "foo@example.com"
-          git config --global user.name "foo"
-          touch .scmversion
-          git add .
-          git commit -m "getting rid of -dirty" | true
+
           make  O=../release/linux-headers olddefconfig
           make O=../release/linux-headers modules_prepare
           rm -r ../release/linux-headers/source
+
+          make mrproper
           cp ../.config .
           sed -i "s/echo \"+\"/#echo \"+\"/g" scripts/setlocalversion
           make olddefconfig
-          make -j2
+          make -j$(($(nproc) + 1))
+
           cp Module.symvers ../release/linux-headers/Module.symvers
           make INSTALL_MOD_PATH=../release modules_install
+
           cp arch/x86/boot/bzImage ../release/boot/vmlinuz-$(ls ../release/lib/modules)
           cp System.map ../release/boot/System.map-$(ls ../release/lib/modules)
           cp .config ../release/boot/config-$(ls ../release/lib/modules)
           cat $(cat ../release/linux-headers/Makefile | grep include | awk '{print $2}') > ../release/linux-headers/Makefile
+
           make bindeb-pkg -j2
           cd ..
           mkdir "artifact"
           rm -rf ./*dbg*.deb 
           mv ./*.deb artifact/
-      - name: Remove linux image zstd compression for Debian
-        run: |
-          mkdir -p debian_linux_image
-          cp artifact/$(ls artifact | grep linux-image) debian_linux_image/$(ls artifact | grep linux-image)
-          cd debian_linux_image
-          ar -x $(ls ../artifact | grep linux-image)
-          zstd -d control.tar.zst
-          zstd -d data.tar.zst
-          xz control.tar
-          xz data.tar
-          rm $(ls ../artifact | grep linux-image)
-          ar -rc debian-$(ls ../artifact | grep linux-image) debian-binary control.tar.xz data.tar.xz
-          mv debian-$(ls ../artifact | grep linux-image) ../artifact/
-          cd ..
-          rm -rf debian_linux_image
-      - name: Remove linux headers zstd compression for Debian
-        run: |
-          mkdir -p debian_linux_headers
-          cp artifact/$(ls artifact | grep linux-headers) debian_linux_headers/$(ls artifact | grep linux-headers)
-          cd debian_linux_headers
-          ar -x $(ls ../artifact | grep linux-headers)
-          zstd -d control.tar.zst
-          zstd -d data.tar.zst
-          xz control.tar
-          xz data.tar
-          rm $(ls ../artifact | grep linux-headers)
-          ar -rc debian-$(ls ../artifact | grep linux-headers) debian-binary control.tar.xz data.tar.xz
-          mv debian-$(ls ../artifact | grep linux-headers) ../artifact/
-          cd ..
-          rm -rf debian_linux_headers
+
       - name: Compress
         run: |
           tar -czvf release-amd64.tar.gz release
           mkdir -p action_release
           mv release-amd64.tar.gz action_release
+
       - name: Uplaod to Release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release create v$(basename $(ls release/lib/modules | awk 'NR==1 {print $0}')) --latest --generate-notes action_release/release-amd64.tar.gz artifact/linux-headers* artifact/linux-image-* artifact/debian-linux-headers-* artifact/debian-linux-image-*
+          gh release create v$(basename $(ls release/lib/modules | awk 'NR==1 {print $0}')) --latest --generate-notes action_release/release-amd64.tar.gz artifact/linux-headers* artifact/linux-image-*
+
       - name: Release
         uses: actions/upload-artifact@v4
         with:
           name: Kernel
           path: ${{ github.workspace }}/action_release/
+
       - name: Packaging
         uses: actions/upload-artifact@v4
         with:
