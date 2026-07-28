@@ -1,0 +1,365 @@
+From bcb3c03818704271d5cb5aeed6c190ff6e9b008a Mon Sep 17 00:00:00 2001
+From: foo <foo@example.com>
+Date: Tue, 28 Jul 2026 22:50:52 +0900
+Subject: [PATCH] add Mimic UDP to TCP obfuscator
+
+---
+ drivers/misc/Kconfig                  |   1 +
+ drivers/misc/Makefile                 |   1 +
+ drivers/misc/mimic/Kconfig            |   3 +
+ drivers/misc/mimic/Makefile           |   3 +
+ drivers/misc/mimic/csum-hack-kfunc.c  |  67 +++++++++++++
+ drivers/misc/mimic/csum-hack-kprobe.c | 137 ++++++++++++++++++++++++++
+ drivers/misc/mimic/csum-hack.h        |  58 +++++++++++
+ drivers/misc/mimic/mimic_main.c       |  17 ++++
+ 8 files changed, 287 insertions(+)
+ create mode 100644 drivers/misc/mimic/Kconfig
+ create mode 100644 drivers/misc/mimic/Makefile
+ create mode 100644 drivers/misc/mimic/csum-hack-kfunc.c
+ create mode 100644 drivers/misc/mimic/csum-hack-kprobe.c
+ create mode 100644 drivers/misc/mimic/csum-hack.h
+ create mode 100644 drivers/misc/mimic/mimic_main.c
+
+diff --git a/drivers/misc/Kconfig b/drivers/misc/Kconfig
+index 00683bf06..f7087007f 100644
+--- a/drivers/misc/Kconfig
++++ b/drivers/misc/Kconfig
+@@ -661,4 +661,5 @@ source "drivers/misc/mchp_pci1xxxx/Kconfig"
+ source "drivers/misc/keba/Kconfig"
+ source "drivers/misc/amd-sbi/Kconfig"
+ source "drivers/misc/rp1/Kconfig"
++source "drivers/misc/mimic/Kconfig"
+ endmenu
+diff --git a/drivers/misc/Makefile b/drivers/misc/Makefile
+index b32a2597d..463a8082f 100644
+--- a/drivers/misc/Makefile
++++ b/drivers/misc/Makefile
+@@ -75,3 +75,4 @@ obj-$(CONFIG_MCHP_LAN966X_PCI)	+= lan966x-pci.o
+ obj-y				+= keba/
+ obj-y				+= amd-sbi/
+ obj-$(CONFIG_MISC_RP1)		+= rp1/
++obj-$(CONFIG_MIMIC)			+= mimic/
+diff --git a/drivers/misc/mimic/Kconfig b/drivers/misc/mimic/Kconfig
+new file mode 100644
+index 000000000..ea043592b
+--- /dev/null
++++ b/drivers/misc/mimic/Kconfig
+@@ -0,0 +1,3 @@
++config MIMIC
++    tristate "Mimic UDP to TCP obfuscator"
++    default m
+diff --git a/drivers/misc/mimic/Makefile b/drivers/misc/mimic/Makefile
+new file mode 100644
+index 000000000..67602844a
+--- /dev/null
++++ b/drivers/misc/mimic/Makefile
+@@ -0,0 +1,3 @@
++obj-$(CONFIG_MIMIC) += mimic.o
++mimic-objs := mimic_main.o csum-hack-kfunc.o
++ccflags-y += -DMIMIC_KMOD
+diff --git a/drivers/misc/mimic/csum-hack-kfunc.c b/drivers/misc/mimic/csum-hack-kfunc.c
+new file mode 100644
+index 000000000..92ee397e6
+--- /dev/null
++++ b/drivers/misc/mimic/csum-hack-kfunc.c
+@@ -0,0 +1,67 @@
++#include <linux/bpf.h>
++#include <linux/btf.h>
++#include <linux/btf_ids.h>
++#include <linux/kprobes.h>
++#include <linux/skbuff.h>
++#include <linux/tcp.h>
++#include <linux/udp.h>
++
++#include "csum-hack.h"
++
++#ifndef __bpf_kfunc
++#define __bpf_kfunc __used noinline
++#endif
++
++#ifndef __bpf_kfunc_start_defs
++#define __bpf_kfunc_start_defs()                                          \
++  __diag_push();                                                          \
++  __diag_ignore_all("-Wmissing-declarations",                             \
++                    "Global kfuncs as their definitions will be in BTF"); \
++  __diag_ignore_all("-Wmissing-prototypes", "Global kfuncs as their definitions will be in BTF")
++#endif
++
++#ifndef __bpf_kfunc_end_defs
++#define __bpf_kfunc_end_defs() __diag_pop()
++#endif
++
++#ifndef BTF_KFUNCS_START
++#define BTF_KFUNCS_START BTF_SET8_START
++#endif
++
++#ifndef BTF_KFUNCS_END
++#define BTF_KFUNCS_END BTF_SET8_END
++#endif
++
++__bpf_kfunc_start_defs();
++
++// Inspect kernel representation of a BPF `__sk_buff`.
++//
++// Newer versions of Linux has `bpf_cast_to_kern_ctx` kfunc. This function is meant to provide such
++// functionality for lower versions of kernel.
++__bpf_kfunc struct sk_buff* mimic_inspect_skb(struct __sk_buff* skb_bpf) {
++  return (struct sk_buff*)skb_bpf;
++}
++
++// Change checksum position in `sk_buff` to instruct hardware/driver/kernel to offset checksum
++// correctly.
++__bpf_kfunc int mimic_change_csum_offset(struct __sk_buff* skb_bpf, __u16 new_proto) {
++  return change_csum_offset((struct sk_buff*)skb_bpf, new_proto);
++}
++
++__bpf_kfunc_end_defs();
++
++BTF_KFUNCS_START(mimic_tc_set)
++BTF_ID_FLAGS(func, mimic_inspect_skb)
++BTF_ID_FLAGS(func, mimic_change_csum_offset)
++BTF_KFUNCS_END(mimic_tc_set)
++
++static const struct btf_kfunc_id_set mimic_tc_kfunc_set = {
++  .owner = THIS_MODULE,
++  .set = &mimic_tc_set,
++};
++
++int csum_hack_init(void) {
++  return register_btf_kfunc_id_set(BPF_PROG_TYPE_SCHED_CLS, &mimic_tc_kfunc_set);
++}
++
++void csum_hack_exit(void) {}
+diff --git a/drivers/misc/mimic/csum-hack-kprobe.c b/drivers/misc/mimic/csum-hack-kprobe.c
+new file mode 100644
+index 000000000..1a59093ed
+--- /dev/null
++++ b/drivers/misc/mimic/csum-hack-kprobe.c
+@@ -0,0 +1,137 @@
++#include <linux/bpf.h>
++#include <linux/filter.h>
++#include <linux/kprobes.h>
++#include <linux/printk.h>
++#include <linux/ptrace.h>
++#include <linux/stddef.h>
++#include <linux/tcp.h>
++#include <linux/udp.h>
++
++#include "csum-hack.h"
++
++#ifdef __mips__
++static inline void regs_set_return_value(struct pt_regs* regs, unsigned long rc) {
++  regs->regs[2] = rc;
++}
++#endif
++
++struct bpf_skb_change_type_params {
++  struct sk_buff* skb;
++  u32 type;
++};
++
++static int bpf_skb_change_type_entry_handler(struct kretprobe_instance* ri, struct pt_regs* regs) {
++  struct bpf_skb_change_type_params* params = (typeof(params))ri->data;
++#if defined(__arm__)
++  params->skb = (void*)regs->uregs[0];
++  params->type = regs->uregs[1];
++#elif defined(__mips__)  // o32/n32/n64
++  params->skb = (void*)regs->regs[4];
++  params->type = regs->regs[5];
++#else
++  params->skb = (void*)regs_get_kernel_argument(regs, 0);
++  params->type = regs_get_kernel_argument(regs, 1);
++#endif
++  return 0;
++}
++NOKPROBE_SYMBOL(bpf_skb_change_type_entry_handler);
++
++static int bpf_skb_change_type_ret_handler(struct kretprobe_instance* ri, struct pt_regs* regs) {
++  unsigned long retval = regs_return_value(regs);
++  if (retval != -EINVAL) return 0;
++  struct bpf_skb_change_type_params* params = (typeof(params))ri->data;
++  if (!params->skb || params->type != MAGIC_FLAG1) return 0;
++  printk_once(KERN_INFO "mimic: bpf_skb_change_type with magic flag called, skb->ip_summed = %d\n",
++              params->skb->ip_summed);
++  regs_set_return_value(regs, params->skb->ip_summed);
++  return 0;
++}
++NOKPROBE_SYMBOL(bpf_skb_change_type_ret_handler);
++
++static struct kretprobe bpf_skb_change_type_probe = {
++  .kp.symbol_name = "bpf_skb_change_type",
++  .entry_handler = bpf_skb_change_type_entry_handler,
++  .handler = bpf_skb_change_type_ret_handler,
++  .data_size = sizeof(struct bpf_skb_change_type_params),
++  .maxactive = 32,
++};
++
++struct bpf_skb_change_proto_params {
++  struct sk_buff* skb;
++  __be16 proto;
++  u64 flags;
++};
++
++static int bpf_skb_change_proto_entry_handler(struct kretprobe_instance* ri, struct pt_regs* regs) {
++  struct bpf_skb_change_proto_params* params = (typeof(params))ri->data;
++
++#if defined(__LP64__) && !defined(__mips__)
++  params->skb = (void*)regs_get_kernel_argument(regs, 0);
++  params->proto = regs_get_kernel_argument(regs, 1);
++  params->flags = regs_get_kernel_argument(regs, 2);
++#elif defined(__mips64__)  // n32/n64
++  params->skb = (void*)regs->regs[4];
++  params->proto = regs->regs[5];
++  params->flags = regs->regs[6];
++#else
++  // Most 32-bit kernels does not have `regs_get_kernel_argument`, need to follow calling
++  // conventions
++#if defined(__arm__)
++  params->skb = (void*)regs->uregs[0];
++  params->proto = regs->uregs[1];
++  unsigned long a2 = regs->uregs[2];
++  unsigned long a3 = regs->uregs[3];
++#elif defined(__mips__)  // o32 only
++  params->skb = (void*)regs->regs[4];
++  params->proto = regs->regs[5];
++  unsigned long a2 = regs->regs[6];
++  unsigned long a3 = regs->regs[7];
++#else
++  params->skb = (void*)regs_get_kernel_argument(regs, 0);
++  params->proto = regs_get_kernel_argument(regs, 1);
++  unsigned long a2 = regs_get_kernel_argument(regs, 2);
++  unsigned long a3 = regs_get_kernel_argument(regs, 3);
++#endif
++
++#if defined(CONFIG_CPU_BIG_ENDIAN)
++  params->flags = ((u64)a2 << 32) + a3;
++#else
++  params->flags = ((u64)a3 << 32) + a2;
++#endif
++
++#endif  // defined(__LP64__) ...
++
++  return 0;
++}
++NOKPROBE_SYMBOL(bpf_skb_change_proto_entry_handler);
++
++static int bpf_skb_change_proto_ret_handler(struct kretprobe_instance* ri, struct pt_regs* regs) {
++  unsigned long retval = regs_return_value(regs);
++  if (retval != -EINVAL) return 0;
++  struct bpf_skb_change_proto_params* params = (typeof(params))ri->data;
++  if (!params->skb || params->flags != MAGIC_FLAG2) return 0;
++  printk_once(
++    KERN_INFO
++    "mimic: bpf_skb_change_proto with magic flag called, skb->csum_offset changed from %d ",
++    params->skb->csum_offset);
++  regs_set_return_value(regs, change_csum_offset(params->skb, params->proto));
++  printk_once(KERN_CONT "to %d\n", params->skb->csum_offset);
++  return 0;
++}
++NOKPROBE_SYMBOL(bpf_skb_change_proto_ret_handler);
++
++static struct kretprobe bpf_skb_change_proto_probe = {
++  .kp.symbol_name = "bpf_skb_change_proto",
++  .entry_handler = bpf_skb_change_proto_entry_handler,
++  .handler = bpf_skb_change_proto_ret_handler,
++  .data_size = sizeof(struct bpf_skb_change_proto_params),
++  .maxactive = 32,
++};
++
++static struct kretprobe* mimic_probes[] = {
++  &bpf_skb_change_type_probe,
++  &bpf_skb_change_proto_probe,
++};
++
++int csum_hack_init(void) { return register_kretprobes(mimic_probes, 2); }
++void csum_hack_exit(void) { unregister_kretprobes(mimic_probes, 2); }
+diff --git a/drivers/misc/mimic/csum-hack.h b/drivers/misc/mimic/csum-hack.h
+new file mode 100644
+index 000000000..d0c5d6739
+--- /dev/null
++++ b/drivers/misc/mimic/csum-hack.h
+@@ -0,0 +1,58 @@
++#ifndef MIMIC_KMOD_CSUM_HACK_H
++#define MIMIC_KMOD_CSUM_HACK_H
++
++#if defined(MIMIC_KMOD)
++#include <linux/stddef.h>
++#include <linux/tcp.h>
++#include <linux/udp.h>
++#elif defined(MIMIC_BPF)
++// clang-format off
++#include "bpf/vmlinux.h"
++#include <bpf/bpf_helpers.h>
++// clang-format on
++#endif
++
++#ifdef MIMIC_KMOD
++int csum_hack_init(void);
++void csum_hack_exit(void);
++#endif
++
++#define MAGIC_FLAG1 0xfc9e39d5
++#define MAGIC_FLAG2 0x4eb37b03751ff785
++
++#ifdef MIMIC_KMOD
++static inline int change_csum_offset(struct sk_buff* skb, __u16 proto) {
++  if (skb->ip_summed != CHECKSUM_PARTIAL) return -1;
++  switch (proto) {
++    case IPPROTO_TCP:
++      skb->csum_offset = offsetof(struct tcphdr, check);
++      break;
++    case IPPROTO_UDP:
++      skb->csum_offset = offsetof(struct udphdr, check);
++      break;
++    default:
++      return -1;
++  }
++  return 0;
++}
++#endif
++
++#ifdef MIMIC_BPF
++#if defined(MIMIC_CHECKSUM_HACK_kfunc)
++static inline int mimic_skb_ip_summed(struct __sk_buff* skb) {
++  struct sk_buff* mimic_inspect_skb(struct __sk_buff * skb) __ksym;
++  return mimic_inspect_skb(skb)->ip_summed;
++}
++int mimic_change_csum_offset(struct __sk_buff* skb, __u16 protocol) __ksym;
++
++#elif defined(MIMIC_CHECKSUM_HACK_kprobe)
++static inline int mimic_skb_ip_summed(struct __sk_buff* skb) {
++  return bpf_skb_change_type(skb, MAGIC_FLAG1);
++}
++static inline int mimic_change_csum_offset(struct __sk_buff* skb, __u16 protocol) {
++  return bpf_skb_change_proto(skb, protocol, MAGIC_FLAG2);
++}
++
++#endif  // MIMIC_CHECKSUM_HACK_*
++#endif  // MIMIC_BPF
++#endif  // MIMIC_KMOD_CSUM_HACK_H
+diff --git a/drivers/misc/mimic/mimic_main.c b/drivers/misc/mimic/mimic_main.c
+new file mode 100644
+index 000000000..16de1fefe
+--- /dev/null
++++ b/drivers/misc/mimic/mimic_main.c
+@@ -0,0 +1,17 @@
++#include <linux/module.h>
++
++#include "csum-hack.h"
++
++MODULE_VERSION("0.7.1");
++MODULE_DESCRIPTION("eBPF TCP -> UDP obfuscator - kernel module extension");
++MODULE_LICENSE("GPL");
++
++static int __init mimic_init(void) {
++  int ret = csum_hack_init();
++  return ret;
++}
++
++static void __exit mimic_exit(void) { csum_hack_exit(); }
++
++module_init(mimic_init);
++module_exit(mimic_exit);
+-- 
+2.54.0
+
