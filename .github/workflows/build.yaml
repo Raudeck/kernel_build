@@ -3,7 +3,7 @@ on:
   workflow_dispatch:
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Maximum build space
         uses: justinthelaw/maximize-github-runner-space@main
@@ -28,11 +28,12 @@ jobs:
 
       - name: Download kernel
         run: |
-          git clone -b v7.1.5 --depth 1 'https://git.kernel.org/pub/scm/linux/kernel/git/stable/linux.git' --single-branch
+          git clone -b v7.2.9 --depth 1 'https://git.kernel.org/pub/scm/linux/kernel/git/stable/linux.git' --single-branch
 
       - name: Download patch
         run: |
           git clone https://gitlab.com/xanmod/linux-patches.git
+          curl -LO 'https://gitlab.com/xanmod/linux/-/commit/4d358e06b74e1398fd593472ea320cd28207c008.patch'
           mkdir -p release
           mkdir -p release/boot
           mkdir -p release/linux-headers
@@ -42,18 +43,18 @@ jobs:
           cd linux
           make mrproper
 
-          patch -p1 < ../linux-patches/linux-7.1.y-xanmod/net/tcp/0001-tcp-Add-a-sysctl-to-skip-tcp-collapse-processing-whe.patch
-          bash -c "patch -p1 < ../linux-patches/linux-7.1.y-xanmod/net/tcp/0001-tcp_bbr-v3-update-TCP-bbr-congestion-control-module-.patch | true"
-          patch -p1 < ../linux-patches/linux-7.1.y-xanmod/net/netfilter/0001-netfilter-Add-netfilter-nf_tables-fullcone-support.patch
-          patch -p1 < ../linux-patches/linux-7.1.y-xanmod/net/netfilter/0001-netfilter-add-xt_FLOWOFFLOAD-target.patch
-
+          git config user.name 'github-actions[bot]'
+          git config user.email 'github-actions[bot]@users.noreply.github.com'
+          patch -p1 < ../linux-patches/linux-7.2.y-xanmod/net/tcp/0001-tcp-Add-a-sysctl-to-skip-tcp-collapse-processing-whe.patch
+          bash -c "patch -p1 < ../linux-patches/linux-7.2.y-xanmod/net/tcp/0001-tcp_bbr-v3-update-TCP-bbr-congestion-control-module-.patch | true"
+          git am -3 --ignore-whitespace ../linux-patches/linux-7.2.y-xanmod/net/netfilter/0001-netfilter-Add-netfilter-nf_tables-fullcone-support.patch
+          patch -p1 < ../linux-patches/linux-7.2.y-xanmod/net/netfilter/0001-netfilter-add-xt_FLOWOFFLOAD-target.patch
+          patch -p1 < ../4d358e06b74e1398fd593472ea320cd28207c008.patch
           bash -c 'sed -i "s/# CONFIG_LOCALVERSION_AUTO is not set
           /CONFIG_LOCALVERSION_AUTO=n/g" .config | true'
           patch -p1 < ../0001-Add-BBRv1.patch
           patch -p1 < ../0001-add-Mimic-UDP-to-TCP-obfuscator.patch
 
-          git config user.name 'github-actions[bot]'
-          git config user.email 'github-actions[bot]@users.noreply.github.com'
           git add .
           git commit -m "patch"
 
