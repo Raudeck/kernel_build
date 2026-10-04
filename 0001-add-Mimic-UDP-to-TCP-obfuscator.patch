@@ -1,4 +1,4 @@
-From bcb3c03818704271d5cb5aeed6c190ff6e9b008a Mon Sep 17 00:00:00 2001
+From f99d8136e254b648e7a4c6bb79475f0359f0175a Mon Sep 17 00:00:00 2001
 From: foo <foo@example.com>
 Date: Tue, 28 Jul 2026 22:50:52 +0900
 Subject: [PATCH] add Mimic UDP to TCP obfuscator
@@ -7,12 +7,12 @@ Subject: [PATCH] add Mimic UDP to TCP obfuscator
  drivers/misc/Kconfig                  |   1 +
  drivers/misc/Makefile                 |   1 +
  drivers/misc/mimic/Kconfig            |   3 +
- drivers/misc/mimic/Makefile           |   3 +
+ drivers/misc/mimic/Makefile           |   4 +
  drivers/misc/mimic/csum-hack-kfunc.c  |  67 +++++++++++++
  drivers/misc/mimic/csum-hack-kprobe.c | 137 ++++++++++++++++++++++++++
  drivers/misc/mimic/csum-hack.h        |  58 +++++++++++
  drivers/misc/mimic/mimic_main.c       |  17 ++++
- 8 files changed, 287 insertions(+)
+ 8 files changed, 288 insertions(+)
  create mode 100644 drivers/misc/mimic/Kconfig
  create mode 100644 drivers/misc/mimic/Makefile
  create mode 100644 drivers/misc/mimic/csum-hack-kfunc.c
@@ -21,20 +21,20 @@ Subject: [PATCH] add Mimic UDP to TCP obfuscator
  create mode 100644 drivers/misc/mimic/mimic_main.c
 
 diff --git a/drivers/misc/Kconfig b/drivers/misc/Kconfig
-index 00683bf06..f7087007f 100644
+index 390256ed9..ae82edd70 100644
 --- a/drivers/misc/Kconfig
 +++ b/drivers/misc/Kconfig
-@@ -661,4 +661,5 @@ source "drivers/misc/mchp_pci1xxxx/Kconfig"
+@@ -651,4 +651,5 @@ source "drivers/misc/mchp_pci1xxxx/Kconfig"
  source "drivers/misc/keba/Kconfig"
  source "drivers/misc/amd-sbi/Kconfig"
  source "drivers/misc/rp1/Kconfig"
 +source "drivers/misc/mimic/Kconfig"
  endmenu
 diff --git a/drivers/misc/Makefile b/drivers/misc/Makefile
-index b32a2597d..463a8082f 100644
+index fed47c767..dcded04a4 100644
 --- a/drivers/misc/Makefile
 +++ b/drivers/misc/Makefile
-@@ -75,3 +75,4 @@ obj-$(CONFIG_MCHP_LAN966X_PCI)	+= lan966x-pci.o
+@@ -74,3 +74,4 @@ obj-$(CONFIG_MCHP_LAN966X_PCI)	+= lan966x-pci.o
  obj-y				+= keba/
  obj-y				+= amd-sbi/
  obj-$(CONFIG_MISC_RP1)		+= rp1/
@@ -50,13 +50,14 @@ index 000000000..ea043592b
 +    default m
 diff --git a/drivers/misc/mimic/Makefile b/drivers/misc/mimic/Makefile
 new file mode 100644
-index 000000000..67602844a
+index 000000000..533fbae93
 --- /dev/null
 +++ b/drivers/misc/mimic/Makefile
-@@ -0,0 +1,3 @@
+@@ -0,0 +1,4 @@
 +obj-$(CONFIG_MIMIC) += mimic.o
-+mimic-objs := mimic_main.o csum-hack-kfunc.o
-+ccflags-y += -DMIMIC_KMOD
++CHECKSUM_HACK ?= kprobe
++mimic-objs := mimic_main.o csum-hack-$(CHECKSUM_HACK).o
++ccflags-y += -DMIMIC_KMOD -DMIMIC_CHECKSUM_HACK_$(CHECKSUM_HACK)
 diff --git a/drivers/misc/mimic/csum-hack-kfunc.c b/drivers/misc/mimic/csum-hack-kfunc.c
 new file mode 100644
 index 000000000..92ee397e6
@@ -361,5 +362,5 @@ index 000000000..16de1fefe
 +module_init(mimic_init);
 +module_exit(mimic_exit);
 -- 
-2.54.0
+2.56.0
 
